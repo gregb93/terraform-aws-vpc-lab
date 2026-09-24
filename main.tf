@@ -107,6 +107,7 @@ resource "aws_instance" "web" {
   instance_type          = "t2.micro"
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.web.id]
+  iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
 
   user_data = <<-EOF
     #!/bin/bash
@@ -230,4 +231,90 @@ resource "aws_iam_role_policy_attachment" "ssm_policy" {
 resource "aws_iam_instance_profile" "ssm_profile" {
   name = "terraform-ec2-ssm-profile"
   role = aws_iam_role.ssm_role.name
+}
+
+#Second private subnet for RDS 
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "terraform-private-subnet-b"
+  }
+}
+
+resource "aws_route_table_association" "private_b" {
+  subnet_id      = aws_subnet.private_b.id
+  route_table_id = aws_route_table.private.id
+}
+
+#Security group for RDS 
+resource "aws_security_group" "rds" {
+  name        = "terraform-rds-sg"
+  description = "Allow MySQL traffic from the web server"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "MySQL from web server"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = {
+    Name = "terraform-rds-sg"
+  }
+}
+
+# RDS DB subnet Group
+resource "aws_db_subnet_group" "main" {
+  name = "terraform-db-subnet-group"
+
+  subnet_ids = [
+    aws_subnet.private.id,
+    aws_subnet.private_b.id
+  ]
+
+  tags = {
+    Name = "terraform-db-subnet-group"
+  }
+}
+
+#MySQL RDS Database
+resource "aws_db_instance" "mysql" {
+  identifier = "terraform-mysql-db"
+
+  engine         = "mysql"
+  engine_version = "8.0"
+  instance_class = "db.t3.micro"
+
+  allocated_storage = 20
+  storage_type      = "gp3"
+
+  db_name  = "terraformdb"
+  username = "admin"
+
+  manage_master_user_password = true
+
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+
+  publicly_accessible = false
+  skip_final_snapshot = true
+
+  tags = {
+    Name = "terraform-mysql-db"
+  }
+}
+
+output "rds_endpoint" {
+  value = aws_db_instance.mysql.endpoint
 }
