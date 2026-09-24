@@ -186,13 +186,14 @@ resource "aws_security_group" "private" {
   }
 }
 
-# Private EC2 instance_type
+# Private EC2 instance
 resource "aws_instance" "private" {
   ami                         = data.aws_ssm_parameter.amazon_linux.value
   instance_type               = "t2.micro"
   subnet_id                   = aws_subnet.private.id
   vpc_security_group_ids      = [aws_security_group.private.id]
   associate_public_ip_address = false
+  iam_instance_profile        = aws_iam_instance_profile.ssm_profile.name
 
   tags = {
     Name = "terraform-private-server"
@@ -201,4 +202,32 @@ resource "aws_instance" "private" {
 
 output "private_server_private_ip" {
   value = aws_instance.private.private_ip
+}
+
+# IAM Role for EC2 Systems Manager
+resource "aws_iam_role" "ssm_role" {
+  name = "terraform-ec2-ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [{
+      Effect = "Allow"
+
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_policy" {
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "terraform-ec2-ssm-profile"
+  role = aws_iam_role.ssm_role.name
 }
