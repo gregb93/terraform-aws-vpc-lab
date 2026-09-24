@@ -67,3 +67,60 @@ resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
+
+# Web Server Security Group
+resource "aws_security_group" "web" {
+  name        = "terraform-web-sg"
+  description = "Allow HTTP traffic"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "terraform-web-sg"
+  }
+}
+
+# Find latest Amazon Linux 2023 AMI
+data "aws_ssm_parameter" "amazon_linux" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+
+}
+
+
+# Public Web Server
+resource "aws_instance" "web" {
+  ami                    = data.aws_ssm_parameter.amazon_linux.value
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.web.id]
+
+  user_data = <<-EOF
+    #!/bin/bash
+    dnf install -y httpd
+    systemctl enable httpd
+    systemctl start httpd
+    echo "<h1>Hello from my terraform AWS Lab!</h1>" > /var/www/html/index.html
+    EOF
+
+  tags = {
+    Name = "terraform-web-server"
+  }
+}
+
+output "web_server_public_ip" {
+  value = aws_instance.web.public_ip
+}
