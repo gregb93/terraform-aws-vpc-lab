@@ -124,3 +124,18 @@ resource "aws_instance" "web" {
 output "web_server_public_ip" {
   value = aws_instance.web.public_ip
 }
+
+#Private Route Table 
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "terraform-private-rt"
+  }
+}
+
+#Associate Private Route Table with Private Subnet
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
