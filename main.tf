@@ -167,3 +167,38 @@ resource "aws_route" "private_nat" {
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.nat.id
 }
+
+# Private EC2 Security Group
+resource "aws_security_group" "private" {
+  name        = "terraform-private-sg"
+  description = "Security group for private EC2"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "terraform-private-sg"
+  }
+}
+
+# Private EC2 instance_type
+resource "aws_instance" "private" {
+  ami                         = data.aws_ssm_parameter.amazon_linux.value
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.private.id
+  vpc_security_group_ids      = [aws_security_group.private.id]
+  associate_public_ip_address = false
+
+  tags = {
+    Name = "terraform-private-server"
+  }
+}
+
+output "private_server_private_ip" {
+  value = aws_instance.private.private_ip
+}
